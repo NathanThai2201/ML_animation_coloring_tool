@@ -342,7 +342,13 @@ def process_image_pair(line_path,regular_path, palette_colors, show):
         colors, counts = np.unique(pixels_reshaped, axis=0, return_counts=True)
         dominant_color = colors[np.argmax(counts)]
         snapped = get_nearest_palette_color(dominant_color, palette_colors)
-        labels.append(tuple(int(c) for c in snapped))
+
+        int_values = []
+
+        for c in snapped:
+            int_values.append(int(c))
+
+        labels.append(tuple(int_values))
 
 
 
@@ -569,24 +575,4 @@ if __name__ == "__main__":
             show=True
         )
 
-
-
-
-
-def opencv_startup():
-
-    # # create a numpy array filled with zeros to use as a blank image
-    # image = np.zeros ( (512, 512, 3), np.uint8)
-    # # draw a green line on the image
-    # cv. line(image, (0, 0), (511, 511), (0, 255, 0), 5)
-    # # draw a red rectangle on the image
-    # cv. rectangle(image, (384, 0), (510, 128), (0, 0, 255), 3)
-    # # draw a blue circle on the image
-    # cv. circle(image, (447, 63), 63, (255, 0, 0), -1)
-    # # display the image
-    # cv. imshow(' Image', image)
-    # # wait for a key press and then close the window
-
-    # cv.waitKey(0)
-    # cv.destroyAllWindows()
     pass
