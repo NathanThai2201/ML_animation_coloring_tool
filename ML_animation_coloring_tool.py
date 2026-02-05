@@ -525,7 +525,15 @@ def reconstruct_blank_image(line_path, regular_path, clf, scaler, palette_colors
 
     for c, cls in zip(contours, cls_pred):
         color = palette_colors[cls]
-        cv.drawContours( reconstructed, [c], -1, tuple(int(v) for v in color), -1)
+
+        
+        color_ints = []
+        for v in color:
+            color_ints.append(int(v))
+
+        draw_color = tuple(color_ints)
+
+        cv.drawContours( reconstructed, [c], -1, draw_color, -1)
 
     if show:
         cv.imshow("Reconstructed Image", reconstructed)
