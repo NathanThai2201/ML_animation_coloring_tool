@@ -10,6 +10,8 @@ labels are given by a palette of colors.<br>
 Features and Labels are trained with Random Forest Classifier.<br>
 New frames are reconstructed with the classification model, current results color prediction accuracy at 89.28%<br>
 
-> **&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*<br>
+<br>
+<br>
+<br>
 
 <sub><sup>[1] Mingqiang Yang, Kidiyo Kpalma, Joseph Ronsin. A Survey of Shape Feature Extraction Techniques. Peng-Yeng Yin. Pattern Recognition, IN-TECH, pp.43-90, 2008. hal-00446037</sup></sub>
