@@ -398,7 +398,7 @@ def process_image_pair(line_path,regular_path, palette_colors, show):
     LEARNING
 '''
 
-def learn_classifier(data, y_cls):
+def learn_classifier(data, y_cls,n_estimators, max_features):
     x_train, x_test, y_train, y_test = train_test_split(
         data,
         y_cls,
@@ -408,19 +408,19 @@ def learn_classifier(data, y_cls):
     )
 
     clf = RandomForestClassifier(
-        n_estimators=500,
-        max_features="sqrt",
+        n_estimators=n_estimators,
+        max_features=max_features,
         n_jobs=-1,
         random_state=42
     )
 
     clf.fit(x_train, y_train)
     y_pred = clf.predict(x_test)
-
+    print(f"n_estimators: {n_estimators}, max_features: {max_features}")
     acc = accuracy_score(y_test, y_pred)
     print("Color prediction accuracy:", acc)
 
-    return x_test, y_test, y_pred, clf
+    return x_test, y_test, y_pred, clf, acc
 
 
 '''
@@ -514,11 +514,11 @@ def extract_contours_and_features(line_path, regular_path, show):
     if len(features) == 0:
         return None, None, None
 
-    return np.array(features, np.float32), valid_contours, img
+    return np.array(features, np.float32), valid_contours, img, ref_img
 
 def reconstruct_blank_image(line_path, regular_path, clf, scaler, palette_colors, show=True):
 
-    data, contours, img = extract_contours_and_features(line_path,regular_path,show)
+    data, contours, img, ref_img = extract_contours_and_features(line_path,regular_path,show)
 
     if data is None:
         return None
@@ -526,8 +526,8 @@ def reconstruct_blank_image(line_path, regular_path, clf, scaler, palette_colors
     #data_scaled = scaler.transform(data)
     cls_pred = clf.predict(data)
 
-    reconstructed = np.full_like(img,255)
-    #reconstructed = img.copy()
+    #reconstructed = np.full_like(img,255)
+    reconstructed = img.copy()
 
     for c, cls in zip(contours, cls_pred):
         color = palette_colors[cls]
@@ -541,7 +541,9 @@ def reconstruct_blank_image(line_path, regular_path, clf, scaler, palette_colors
 
         cv.drawContours( reconstructed, [c], -1, draw_color, -1)
 
+    # reconstructed with filled contours
     print("AAAAA",reconstructed)
+    # linework
     print("AAAAA",img)
 
 
@@ -581,19 +583,33 @@ if __name__ == "__main__":
         print("Total samples:", len(data))
 
         # Scale features (currently not in use)
-        # scaler = StandardScaler()
+        scaler = StandardScaler()
         #data_scaled = scaler.fit_transform(data)
 
         # Train random forest classifier
-        x_test, y_test, y_pred, clf = learn_classifier(data, y_cls)
+        params = {
+            "n_estimators": [200,400,600,800,1000],
+            "max_depth": [None, 10, 20, 30 , 50],
+            "max_features": [None,"sqrt", "log2"]
+        }
+        best_acc = 0
+        best_clf = None
+        for i in params["n_estimators"]:
+            for j in params["max_features"]:
+                x_test, y_test, y_pred, clf, acc = learn_classifier(data, y_cls,i,j)
+                if acc > best_acc:
+                    best_acc = acc
+                    best_clf = clf
 
-        dump(clf, "model.joblib")
+
+        dump(best_clf, "model.joblib")
     else:
-        # Remove if enable scaler. Scaler copy is in the train loop
         scaler = StandardScaler()
         palette_colors = load_palette_colors("palette.png")
         clf = load("model.joblib")
 
+    
+    
     '''
         Reconstruction
     '''
