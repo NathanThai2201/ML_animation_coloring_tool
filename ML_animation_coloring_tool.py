@@ -8,6 +8,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.decomposition import PCA
 from sklearn.metrics import accuracy_score
+from joblib import dump, load
+
+
 
 '''
     PREPROCESSING
@@ -405,7 +408,7 @@ def learn_classifier(data, y_cls):
     )
 
     clf = RandomForestClassifier(
-        n_estimators=450,
+        n_estimators=500,
         max_features="sqrt",
         n_jobs=-1,
         random_state=42
@@ -523,7 +526,8 @@ def reconstruct_blank_image(line_path, regular_path, clf, scaler, palette_colors
     #data_scaled = scaler.transform(data)
     cls_pred = clf.predict(data)
 
-    reconstructed = img.copy()
+    reconstructed = np.full_like(img,255)
+    #reconstructed = img.copy()
 
     for c, cls in zip(contours, cls_pred):
         color = palette_colors[cls]
@@ -537,6 +541,18 @@ def reconstruct_blank_image(line_path, regular_path, clf, scaler, palette_colors
 
         cv.drawContours( reconstructed, [c], -1, draw_color, -1)
 
+    print("AAAAA",reconstructed)
+    print("AAAAA",img)
+
+
+    w,h = img[0].shape
+    for i in np.arange(0,w,1):
+        for j in np.arange(0,h,1):
+            pass
+
+
+
+    reconstructed = reconstructed - img
     if show:
         cv.imshow("Reconstructed Image", reconstructed)
         cv.waitKey(0)
@@ -552,23 +568,31 @@ if __name__ == "__main__":
     '''
         Training
     '''
-    data, y_cls, palette_colors = batch_process(
-        blank_dir="data/lines",
-        regular_dir="data/regular",
-        palette_path="palette.png"
-    )
+    not_trained = True
+    
+    if not_trained:
+        data, y_cls, palette_colors = batch_process(
+            blank_dir="data/lines",
+            regular_dir="data/regular",
+            palette_path="palette.png"
+        )
 
 
-    print("Total samples:", len(data))
+        print("Total samples:", len(data))
 
-    # Scale features (currently not in use)
-    scaler = StandardScaler()
-    #data_scaled = scaler.fit_transform(data)
+        # Scale features (currently not in use)
+        # scaler = StandardScaler()
+        #data_scaled = scaler.fit_transform(data)
 
-    # Train random forest classifier
-    x_test, y_test, y_pred, clf = learn_classifier(data, y_cls)
+        # Train random forest classifier
+        x_test, y_test, y_pred, clf = learn_classifier(data, y_cls)
 
-
+        dump(clf, "model.joblib")
+    else:
+        # Remove if enable scaler. Scaler copy is in the train loop
+        scaler = StandardScaler()
+        palette_colors = load_palette_colors("palette.png")
+        clf = load("model.joblib")
 
     '''
         Reconstruction
