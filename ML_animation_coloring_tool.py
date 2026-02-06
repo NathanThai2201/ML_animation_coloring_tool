@@ -27,6 +27,7 @@ def load_palette_colors(palette_path):
     if palette_img is None:
         raise ValueError("Failed to load palette image")
 
+    # assume clean no antialiasing
     pixels = palette_img.reshape(-1, 3)
     colors = np.unique(pixels, axis=0)
 
@@ -132,9 +133,10 @@ def batch_process(blank_dir, regular_dir, palette_path):
 
     files = sorted(os.listdir(blank_dir))
 
-    for fname in files:
-        line_path = os.path.join(blank_dir, fname)
-        regular_path = os.path.join(regular_dir, fname)
+    # loop through files
+    for f in files:
+        line_path = os.path.join(blank_dir, f)
+        regular_path = os.path.join(regular_dir, f)
 
         if not os.path.exists(regular_path):
             continue
@@ -155,7 +157,7 @@ def batch_process(blank_dir, regular_dir, palette_path):
 
         all_data.append(data)
         all_classes.append(y_cls)
-        print(f"Processed {fname}")
+        print(f"Processed {f}")
 
     return (
         np.vstack(all_data),
@@ -403,7 +405,7 @@ def learn_classifier(data, y_cls):
     )
 
     clf = RandomForestClassifier(
-        n_estimators=400,
+        n_estimators=450,
         max_features="sqrt",
         n_jobs=-1,
         random_state=42
@@ -526,7 +528,7 @@ def reconstruct_blank_image(line_path, regular_path, clf, scaler, palette_colors
     for c, cls in zip(contours, cls_pred):
         color = palette_colors[cls]
 
-        
+
         color_ints = []
         for v in color:
             color_ints.append(int(v))
