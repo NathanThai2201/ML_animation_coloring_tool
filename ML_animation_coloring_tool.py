@@ -13,8 +13,24 @@ from joblib import dump, load
 
 
 '''
-    PREPROCESSING
+    PREPROCESSING AND HELPERS
 '''
+
+def dominant_palette_color(pixels, palette_colors):
+    if pixels.size == 0:
+        return np.array([0, 0, 0], dtype=np.uint8)
+
+    # Strip alpha if present
+    if pixels.shape[-1] == 4:
+        pixels = pixels[:, :3]
+
+    pixels = pixels.reshape(-1, 3)
+
+    colors, counts = np.unique(pixels, axis=0, return_counts=True)
+    dominant = colors[np.argmax(counts)]
+
+    return get_nearest_palette_color(dominant, palette_colors)
+
 def get_nearest_palette_color(color_bgr, palette_bgr):
     # Map a BGR color to nearest palette color
 
@@ -33,6 +49,10 @@ def load_palette_colors(palette_path):
     # assume clean no antialiasing
     pixels = palette_img.reshape(-1, 3)
     colors = np.unique(pixels, axis=0)
+
+    # include black as an exception case
+    # np.append(colors, [0,0,0])
+        
 
     return colors.astype(np.float32)
 
@@ -121,6 +141,47 @@ def contour_features(contours,img):
         dx,
         dy
     ]
+
+def filter_bad_contours(contours, hierarchy, img, ref_img, palette_colors):
+    h, w = img.shape[:2]
+
+    filtered_contours = []
+
+    DARK_THRESH = np.array([100, 100, 100], dtype=np.float32)
+
+    for i, contour in enumerate(contours):
+        # remove silhouette
+        if hierarchy[0][i][3] == -1:
+            continue
+
+        # mask
+        mask = np.zeros((h, w), dtype=np.uint8)
+        cv.drawContours(mask, [contour], -1, 255, -1)
+
+        img_pixels = img[mask == 255]
+
+        if img_pixels.size == 0:
+            continue
+
+        # check contour for mean color over line art image
+        mean_color = img_pixels[:, :3].mean(axis=0) 
+
+        if np.all(mean_color < DARK_THRESH):
+            continue
+
+        # snapped_img = dominant_palette_color(img_pixels, palette_colors)
+
+        # # old skip contours, getting the domininant collor of the lineart image if is not blank
+        # if np.all(snapped_img == 0):
+        #     continue
+
+        # must have valid features
+        if contour_features(contour, img) is None:
+            continue
+
+        filtered_contours.append(contour)
+
+    return filtered_contours
 
 def batch_process(blank_dir, regular_dir, palette_path):
 
@@ -296,64 +357,26 @@ def process_image_pair(line_path,regular_path, palette_colors, show):
                    
     # remove first contour, ie silouhette
     #print("A",hierarchy)
-    contours2 = []
-
-    for c in range(len(contours)):
-         if hierarchy[0][c][3] != -1:
-            contours2.append(contours[c])
-
-    image_blank = np.zeros_like(img)
     
-
-    for c in range(len(contours2)):
-            color = tuple(np.random.randint(0, 256, size=3).tolist())
-            cv.drawContours(image_blank, [contours2[c]], -1, color, -1)
-
-    #cv.drawContours(image=image_copy, contours=contours, contourIdx=-1, color=(0, 255, 0), thickness=2, lineType=cv.LINE_AA)
-                    
-    # view results
-    if show:
-        print("number of contours found",len(contours))
-        cv.imshow('None contour approximation', image_blank)
-        cv.waitKey(0)
-        cv.imwrite('contours_none_image1.jpg', image_blank)
-        cv.destroyAllWindows()
-
-
-
-
-
-    '''
-        DATA AND LABELS
-    '''
-
+    contours2 = filter_bad_contours(
+        contours,
+        hierarchy,
+        img,
+        ref_img,
+        palette_colors
+    )
+    
     labels = []
+    h, w = img.shape[:2]
 
-    for c in contours2:
-        # Create a mask for each contour
-        mask = np.zeros(img.shape[:2], dtype=np.uint8)
-        cv.drawContours(mask, [c], -1, 255, -1)
+    for contour in contours2:
+        mask = np.zeros((h, w), dtype=np.uint8)
+        cv.drawContours(mask, [contour], -1, 255, -1)
 
-        # get pixels from the original reference image
-        pixels = ref_img[mask == 255]
+        ref_pixels = ref_img[mask == 255]
+        snapped_ref = dominant_palette_color(ref_pixels, palette_colors)
 
-        if len(pixels) == 0:
-            labels.append((0, 0, 0)) # default to black
-            continue
-
-
-        # Find most common color
-        pixels_reshaped = pixels.reshape(-1, 3)
-        colors, counts = np.unique(pixels_reshaped, axis=0, return_counts=True)
-        dominant_color = colors[np.argmax(counts)]
-        snapped = get_nearest_palette_color(dominant_color, palette_colors)
-
-        int_values = []
-
-        for c in snapped:
-            int_values.append(int(c))
-
-        labels.append(tuple(int_values))
+        labels.append(tuple(map(int, snapped_ref)))
 
 
 
@@ -426,7 +449,9 @@ def learn_classifier(data, y_cls,n_estimators, max_features):
 '''
     RECONSTRUCTION
 '''
-def extract_contours_and_features(line_path, regular_path, show):
+
+def extract_contours_and_features(line_path, regular_path, palette_colors, show):
+
     '''
     THRESHOLDING STAGE
     '''
@@ -496,11 +521,15 @@ def extract_contours_and_features(line_path, regular_path, show):
     '''
       FEATURES 
     '''
-    contours2 = [
-        contours[i]
-        for i in range(len(contours))
-        if hierarchy[0][i][3] != -1
-    ]
+    
+    contours2 = filter_bad_contours(
+        contours,
+        hierarchy,
+        img,
+        ref_img,
+        palette_colors
+    )
+
 
     features = []
     valid_contours = []
@@ -518,7 +547,13 @@ def extract_contours_and_features(line_path, regular_path, show):
 
 def reconstruct_blank_image(line_path, regular_path, clf, scaler, palette_colors, show=True):
 
-    data, contours, img, ref_img = extract_contours_and_features(line_path,regular_path,show)
+    data, contours, img, ref_img = extract_contours_and_features(
+        line_path,
+        regular_path,
+        palette_colors,
+        show
+    )
+
 
     if data is None:
         return None
@@ -539,23 +574,26 @@ def reconstruct_blank_image(line_path, regular_path, clf, scaler, palette_colors
 
         draw_color = tuple(color_ints)
 
-        cv.drawContours( reconstructed, [c], -1, draw_color, -1)
+        cv.drawContours( reconstructed, [c], contourIdx = -1, lineType=cv.LINE_AA, color = draw_color, thickness=-1)
 
-    # reconstructed with filled contours
-    print("AAAAA",reconstructed)
-    # linework
-    print("AAAAA",img)
+    # both img and reconstructed have 4 channels
+    # print(reconstructed.shape, reconstructed)
+    # print(img.shape, img)
+    # alpha manipulation for line art addition
 
+    reconstructed = reconstructed.astype(np.float32)
 
-    w,h = img[0].shape
-    for i in np.arange(0,w,1):
-        for j in np.arange(0,h,1):
-            pass
+    w,h,_ = img.shape
+    for i in range(0,w-1,1):
+        for j in range(0,h-1,1):
+            pixel = reconstructed[i,j]
+            calculated_scalar = (255-img[i,j,3])/255
+            pixel[:3] =  pixel[:3]*calculated_scalar + img[i,j][:3] * (1-calculated_scalar)
 
+    reconstructed = np.clip(reconstructed, 0, 255).astype(np.uint8)
 
-
-    reconstructed = reconstructed - img
     if show:
+        cv.imshow("Linework Image", img)
         cv.imshow("Reconstructed Image", reconstructed)
         cv.waitKey(0)
         cv.destroyAllWindows()
@@ -570,8 +608,13 @@ if __name__ == "__main__":
     '''
         Training
     '''
-    not_trained = True
-    
+
+    training_input = input("Train model on data? (Y/N)")
+    if training_input in "yY":
+        not_trained = True
+    else:
+        not_trained = False
+
     if not_trained:
         data, y_cls, palette_colors = batch_process(
             blank_dir="data/lines",
@@ -602,17 +645,21 @@ if __name__ == "__main__":
                     best_clf = clf
 
 
-        dump(best_clf, "model.joblib")
+        dump(best_clf, "cache/model.joblib")
+        dump(best_acc, "cache/scores.joblib")
     else:
         scaler = StandardScaler()
         palette_colors = load_palette_colors("palette.png")
-        clf = load("model.joblib")
+        clf = load("cache/model.joblib")
+        acc = load("cache/scores.joblib")
 
     
     
     '''
         Reconstruction
     '''
+    print("Color prediction accuracy:", acc)
+
     # Test cases within dataset
     for i in range(4):
         random_idx = np.random.randint(10,70)
