@@ -12,3 +12,4 @@ New frames are reconstructed using the trained classification model. Current res
 
 
 <sub><sup>[1] Mingqiang Yang, Kidiyo Kpalma, Joseph Ronsin. A Survey of Shape Feature Extraction Techniques. Peng-Yeng Yin. Pattern Recognition, IN-TECH, pp.43-90, 2008. hal-00446037</sup></sub>
+

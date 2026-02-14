@@ -147,7 +147,7 @@ def filter_bad_contours(contours, hierarchy, img, ref_img, palette_colors):
 
     filtered_contours = []
 
-    DARK_THRESH = np.array([100, 100, 100], dtype=np.float32)
+    DARK_THRESH = np.array([130, 130, 130], dtype=np.float32)
 
     for i, contour in enumerate(contours):
         # remove silhouette
@@ -521,7 +521,7 @@ def extract_contours_and_features(line_path, regular_path, palette_colors, show)
     '''
       FEATURES 
     '''
-    
+
     contours2 = filter_bad_contours(
         contours,
         hierarchy,
@@ -575,6 +575,7 @@ def reconstruct_blank_image(line_path, regular_path, clf, scaler, palette_colors
         draw_color = tuple(color_ints)
 
         cv.drawContours( reconstructed, [c], contourIdx = -1, lineType=cv.LINE_AA, color = draw_color, thickness=-1)
+        # cv.drawContours( reconstructed, [c], contourIdx = -1, lineType=cv.LINE_AA, color = draw_color, thickness=2)
 
     # both img and reconstructed have 4 channels
     # print(reconstructed.shape, reconstructed)
