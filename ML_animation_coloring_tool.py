@@ -2,7 +2,7 @@ import os
 import cv2 as cv
 import numpy as np
 import matplotlib
-matplotlib.use('TkAgg')   
+#matplotlib.use('TkAgg')   
 from matplotlib import pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
@@ -179,8 +179,18 @@ def filter_bad_contours(contours, hierarchy, img, ref_img, palette_colors):
         if contour_features(contour, img) is None:
             continue
 
+     
         filtered_contours.append(contour)
+    
+    # debug_img = np.zeros_like(img)
+    # for c in filtered_contours:
+    #     color = tuple(np.random.randint(0, 256, 3).tolist())
+    #     cv.drawContours(debug_img, [c], -1, color, -1)
 
+    # cv.imshow("Final Filtered Contours", debug_img)
+    # cv.waitKey(0)
+    # cv.destroyAllWindows()
+    
     return filtered_contours
 
 def batch_process(blank_dir, regular_dir, palette_path):
@@ -562,7 +572,7 @@ def reconstruct_blank_image(line_path, regular_path, clf, scaler, palette_colors
     cls_pred = clf.predict(data)
 
     #reconstructed = np.full_like(img,255)
-    reconstructed = img.copy()
+    reconstructed = np.zeros_like(img)
 
     for c, cls in zip(contours, cls_pred):
         color = palette_colors[cls]
@@ -574,30 +584,124 @@ def reconstruct_blank_image(line_path, regular_path, clf, scaler, palette_colors
 
         draw_color = tuple(color_ints)
 
-        cv.drawContours( reconstructed, [c], contourIdx = -1, lineType=cv.LINE_AA, color = draw_color, thickness=-1)
+        cv.drawContours( reconstructed, [c], contourIdx = -1, lineType=cv.LINE_8, color = draw_color, thickness=-1)
         # cv.drawContours( reconstructed, [c], contourIdx = -1, lineType=cv.LINE_AA, color = draw_color, thickness=2)
 
+    checkpoint1 = reconstructed.copy()
     # both img and reconstructed have 4 channels
     # print(reconstructed.shape, reconstructed)
     # print(img.shape, img)
     # alpha manipulation for line art addition
 
+    # ensure float type for image values
+    img = img.astype(np.float32)
     reconstructed = reconstructed.astype(np.float32)
 
-    w,h,_ = img.shape
-    for i in range(0,w-1,1):
-        for j in range(0,h-1,1):
-            pixel = reconstructed[i,j]
-            calculated_scalar = (255-img[i,j,3])/255
-            pixel[:3] =  pixel[:3]*calculated_scalar + img[i,j][:3] * (1-calculated_scalar)
 
+    #simplified floodfill
+    # w,h,_ = img.shape
+    # for i in range(0,w-1,1):
+    #     for j in range(0,h-1,1):
+    #         pixel = reconstructed[i,j]
+    #         if (pixel[:3] == [0,0,0]).all() or (pixel[:3] == [255,255,255]).all(): # if pixel is black or white
+    #             #print("detected black",pixel[:3])
+    #             for s_pixel in [reconstructed[i,j+1], # udlr
+    #                             reconstructed[i+1,j],
+    #                             reconstructed[i-1,j],
+    #                             reconstructed[i,j-1],
+    #                             reconstructed[i-1,j-1], #diags
+    #                             reconstructed[i+1,j+1], 
+    #                              reconstructed[i+1,j-1], 
+    #                             reconstructed[i-1,j+1]]:
+    #                 #print("-",s_pixel)
+    #                 if s_pixel[:3] in palette_colors:        
+    #                     pixel[:3] = s_pixel[:3]
+    #                     break
+    
+    ff_its = 4 # proportional to blur strength
+    for it in range(ff_its):
+        img_rgb = reconstructed[:, :,:3]
+
+        #mask where black and white
+        mask = (
+            np.all(img_rgb == [0,0,0], axis = 2) | np.all(img_rgb == [255,255,255],  axis = 2)
+        )
+
+        # pad image to safely get neighbours
+        img_padded = np.pad(img_rgb, ((1,1),(1,1),(0,0)), mode = 'edge')
+
+
+        neighbours = np.stack([
+            img_padded[1:-1, 2:,   :],  # right
+            img_padded[2:,   1:-1, :],  # down
+            img_padded[:-2,  1:-1, :],  # up
+            img_padded[1:-1, :-2,  :],  # left
+            img_padded[2:,   2:,   :],  # down right
+            img_padded[:-2, :-2,   :],  # up left
+            img_padded[2:,   :-2,  :],  # down left
+            img_padded[:-2,  2:,   :],  # up right
+        ], axis=0)
+
+        palette = palette_colors.astype(np.float32)
+
+        #print("shapes:",neighbours.shape, palette.shape)
+        # reshape for broadcasting
+        neighbours_exp = neighbours[..., None, :]              # (8, h, w, 3) -> (8, h, w, 1, 3 )
+        palette_exp   = palette[None, None, None, :, :]     # (p,3) -> (1, 1, 1, p, 3)
+
+        matches = np.all(neighbours_exp == palette_exp, axis=-1)  # (8,h,w,p)
+
+        valid_neighbor = np.any(matches, axis=-1)  # (8,h,w)
+
+        first_valid = np.argmax(valid_neighbor, axis=0)
+
+        rows, cols = np.where(mask)
+
+        reconstructed[rows, cols, :3] = neighbours[first_valid[rows, cols], rows, cols]
+            
+        #print("Palette colors:",palette_colors)
+
+
+    #checkpoint2 = reconstructed.copy()
+
+
+    # img alpha over reconstructed
+
+    # w,h,_ = img.shape
+    # for i in range(0,w-1,1):
+    #     for j in range(0,h-1,1):
+    #         pixel = reconstructed[i,j]
+    #         calculated_scalar = (255-img[i,j,3])/255
+    #         pixel[:3] =  pixel[:3]*calculated_scalar + img[i,j][:3] * (1-calculated_scalar)
+
+    # # vectorized version
+    alpha = img[:, :,3] / 255.0             
+    scalar = 1.0 - alpha                      
+
+    scalar = scalar[..., None]               
+
+    reconstructed[:, :,:3] = (
+        reconstructed[:, :,:3] * scalar + img[:, :,:3] * (1 - scalar)
+    )
+
+
+    # clip values and return as readable image type.
     reconstructed = np.clip(reconstructed, 0, 255).astype(np.uint8)
 
-    if show:
-        cv.imshow("Linework Image", img)
-        cv.imshow("Reconstructed Image", reconstructed)
-        cv.waitKey(0)
-        cv.destroyAllWindows()
+    # plt.title("contour drawing")
+    # plt.imshow(cv.cvtColor(checkpoint1, cv.COLOR_BGR2RGB))
+    # plt.axis("off")
+    # plt.show()
+
+    # plt.title("Floodfill")
+    # plt.imshow(cv.cvtColor(checkpoint2, cv.COLOR_BGR2RGB))
+    # plt.axis("off")
+    # plt.show()
+
+    plt.title("Reconstructed image")
+    plt.imshow(cv.cvtColor(reconstructed, cv.COLOR_BGR2RGB))
+    plt.axis("off")
+    plt.show()
 
     return reconstructed
 
@@ -622,8 +726,6 @@ if __name__ == "__main__":
             regular_dir="data/regular",
             palette_path="palette.png"
         )
-
-
         print("Total samples:", len(data))
 
         # Scale features (currently not in use)
