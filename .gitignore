@@ -1,6 +1,19 @@
 **/.DS_Store
 
 model.joblib
+scores.joblib
+
+data/train_lines/*
+!data/train_lines/.gitkeep
+
+data/train_colored/*
+!data/train_colored/.gitkeep
+
+data/in_lines/*
+!data/in_lines/.gitkeep
+
+data/in_filled/*
+!data/in_filled/.gitkeep
 
 output/out_full/*
 !output/out_full/.gitkeep
