@@ -11,9 +11,16 @@ from sklearn.metrics import accuracy_score
 from joblib import dump, load
 
 
+TRAIN_LINES_DIR = "data/train_lines"
+TRAIN_COLORED_DIR="data/train_colored"
+PALETTE_DIR="palette.png"
+IN_LINES_DIR="data/in_lines"
+IN_FILLED_DIR="data/in_filled"
+OUT_FULL = "output/out_full"
+OUT_FILLS_ONLY = "output/out_fills_only"
 
 '''
-    PREPROCESSING AND HELPERS
+    PREPROCESSING
 '''
 
 def dominant_palette_color(pixels, palette_colors):
@@ -142,7 +149,7 @@ def contour_features(contours,img):
         dy
     ]
 
-def filter_bad_contours(contours, hierarchy, img, ref_img, palette_colors):
+def filter_bad_contours(contours, hierarchy, img):
     h, w = img.shape[:2]
 
     filtered_contours = []
@@ -193,7 +200,7 @@ def filter_bad_contours(contours, hierarchy, img, ref_img, palette_colors):
     
     return filtered_contours
 
-def batch_process(blank_dir, regular_dir, palette_path):
+def batch_process_train(blank_dir, regular_dir, palette_path):
 
     palette_colors = load_palette_colors(palette_path).astype(np.uint8)
 
@@ -372,8 +379,6 @@ def process_image_pair(line_path,regular_path, palette_colors, show):
         contours,
         hierarchy,
         img,
-        ref_img,
-        palette_colors
     )
     
     labels = []
@@ -460,6 +465,30 @@ def learn_classifier(data, y_cls,n_estimators, max_features):
     RECONSTRUCTION
 '''
 
+def batch_process_reconstruction(blank_dir, regular_dir):
+
+    files = sorted(os.listdir(blank_dir))
+
+    # loop through files
+    for f in files:
+        line_path = os.path.join(blank_dir, f)
+        regular_path = os.path.join(regular_dir, f)
+        output_full_path = os.path.join(OUT_FULL, f)
+        output_fills_path = os.path.join(OUT_FILLS_ONLY, f)
+
+        # if not os.path.exists(regular_path):
+        #     continue
+
+        reconstructed = reconstruct_blank_image(
+            line_path,
+            regular_path,
+            output_full_path,
+            output_fills_path,
+            clf=clf,
+            palette_colors=palette_colors,
+            show=False
+        )
+
 def extract_contours_and_features(line_path, regular_path, palette_colors, show):
 
     '''
@@ -470,7 +499,7 @@ def extract_contours_and_features(line_path, regular_path, palette_colors, show)
     alpha_img = cv.imread(regular_path, cv.IMREAD_UNCHANGED)
 
 
-    if img is None or ref_img is None:
+    if img is None:
         print(f"Failed to load {line_path}")
         return None, None
 
@@ -508,21 +537,22 @@ def extract_contours_and_features(line_path, regular_path, palette_colors, show)
     skinRegion = cv.inRange(hsv,min_YCrCb,max_YCrCb) # Create a mask with boundaries
 
 
+    # only if back filled image exists:
+    if ref_img is not None:
+        # add white border
+        skinRegion[0, :] = 255
+        skinRegion[-1, :] = 255
+        skinRegion[:, 0] = 255
+        skinRegion[:, -1] = 255
 
-    # add white border
-    skinRegion[0, :] = 255
-    skinRegion[-1, :] = 255
-    skinRegion[:, 0] = 255
-    skinRegion[:, -1] = 255
+        # remove border where original image is transparent
+        if alpha_img.ndim == 3 and alpha_img.shape[2] == 4:
+            alpha = alpha_img[:, :, 3]
+            alpha_mask = np.where(alpha > 0, 255, 0).astype(np.uint8)
+        else:
+            alpha_mask = np.full(skinRegion.shape, 255, dtype=np.uint8)
 
-    # remove border where original image is transparent
-    if alpha_img.ndim == 3 and alpha_img.shape[2] == 4:
-        alpha = alpha_img[:, :, 3]
-        alpha_mask = np.where(alpha > 0, 255, 0).astype(np.uint8)
-    else:
-        alpha_mask = np.full(skinRegion.shape, 255, dtype=np.uint8)
-
-    skinRegion = cv.bitwise_and(skinRegion, alpha_mask)
+        skinRegion = cv.bitwise_and(skinRegion, alpha_mask)
 
 
 
@@ -536,8 +566,6 @@ def extract_contours_and_features(line_path, regular_path, palette_colors, show)
         contours,
         hierarchy,
         img,
-        ref_img,
-        palette_colors
     )
 
 
@@ -555,7 +583,7 @@ def extract_contours_and_features(line_path, regular_path, palette_colors, show)
 
     return np.array(features, np.float32), valid_contours, img, ref_img
 
-def reconstruct_blank_image(line_path, regular_path, clf, scaler, palette_colors, show=True):
+def reconstruct_blank_image(line_path, regular_path, output_full_path,output_fills_path, clf, palette_colors, show=True):
 
     data, contours, img, ref_img = extract_contours_and_features(
         line_path,
@@ -587,7 +615,7 @@ def reconstruct_blank_image(line_path, regular_path, clf, scaler, palette_colors
         cv.drawContours( reconstructed, [c], contourIdx = -1, lineType=cv.LINE_8, color = draw_color, thickness=-1)
         # cv.drawContours( reconstructed, [c], contourIdx = -1, lineType=cv.LINE_AA, color = draw_color, thickness=2)
 
-    checkpoint1 = reconstructed.copy()
+    #checkpoint1 = reconstructed.copy()
     # both img and reconstructed have 4 channels
     # print(reconstructed.shape, reconstructed)
     # print(img.shape, img)
@@ -662,7 +690,8 @@ def reconstruct_blank_image(line_path, regular_path, clf, scaler, palette_colors
         #print("Palette colors:",palette_colors)
 
 
-    #checkpoint2 = reconstructed.copy()
+    # save checkpoint2 as fills only
+    fills_only = np.clip(reconstructed[:, :, :3], 0, 255).astype(np.uint8)
 
 
     # img alpha over reconstructed
@@ -687,6 +716,27 @@ def reconstruct_blank_image(line_path, regular_path, clf, scaler, palette_colors
 
     # clip values and return as readable image type.
     reconstructed = np.clip(reconstructed, 0, 255).astype(np.uint8)
+    if ref_img is not None:
+        if ref_img.shape[2] == 3:
+        # Reload with alpha if not already
+            ref_with_alpha = cv.imread(regular_path, cv.IMREAD_UNCHANGED)
+        else:
+            ref_with_alpha = ref_img
+
+        if ref_with_alpha.shape[2] == 4:
+            alpha = ref_with_alpha[:, :, 3]
+        else:
+            # If no alpha exists, assume fully opaque
+            alpha = np.full(ref_with_alpha.shape[:2], 255, dtype=np.uint8)
+    else:
+        alpha = np.full(reconstructed.shape[:2], 255, dtype=np.uint8)
+
+    # Make reconstructed & fills_only 4 channel clipped
+    reconstructed = np.clip(reconstructed[:, :, :3], 0, 255).astype(np.uint8)
+
+    reconstructed_rgba = np.dstack((reconstructed, alpha))
+    fills_only_rgba = np.dstack((fills_only, alpha))
+
 
     # plt.title("contour drawing")
     # plt.imshow(cv.cvtColor(checkpoint1, cv.COLOR_BGR2RGB))
@@ -697,13 +747,16 @@ def reconstruct_blank_image(line_path, regular_path, clf, scaler, palette_colors
     # plt.imshow(cv.cvtColor(checkpoint2, cv.COLOR_BGR2RGB))
     # plt.axis("off")
     # plt.show()
+    cv.imwrite(output_full_path, reconstructed_rgba)
+    cv.imwrite(output_fills_path, fills_only_rgba)
+    if show:
 
-    plt.title("Reconstructed image")
-    plt.imshow(cv.cvtColor(reconstructed, cv.COLOR_BGR2RGB))
-    plt.axis("off")
-    plt.show()
+        plt.title("Reconstructed image")
+        plt.imshow(cv.cvtColor(reconstructed_rgba, cv.COLOR_BGR2RGB))
+        plt.axis("off")
+        plt.show()
 
-    return reconstructed
+    return reconstructed_rgba
 
 
 if __name__ == "__main__":
@@ -721,10 +774,10 @@ if __name__ == "__main__":
         not_trained = False
 
     if not_trained:
-        data, y_cls, palette_colors = batch_process(
-            blank_dir="data/lines",
-            regular_dir="data/regular",
-            palette_path="palette.png"
+        data, y_cls, palette_colors = batch_process_train(
+            blank_dir=TRAIN_LINES_DIR,
+            regular_dir=TRAIN_COLORED_DIR,
+            palette_path=PALETTE_DIR
         )
         print("Total samples:", len(data))
 
@@ -763,16 +816,24 @@ if __name__ == "__main__":
     '''
     print("Color prediction accuracy:", acc)
 
-    # Test cases within dataset
-    for i in range(4):
-        random_idx = np.random.randint(10,70)
-        reconstructed = reconstruct_blank_image(
-            line_path="data/lines/Timeline 1_00"+str(random_idx)+".png",
-            regular_path = "data/regular/Timeline 1_00"+str(random_idx)+".png",
-            clf=clf,
-            scaler=scaler,
-            palette_colors=palette_colors,
-            show=True
+    # Test cases
+    # # Test cases within dataset
+    
+    # for i in range(4):
+    #     random_idx = np.random.randint(10,70)
+    #     reconstructed = reconstruct_blank_image(
+    #         line_path="data/train_lines/Timeline 1_00"+str(random_idx)+".png",
+    #         regular_path = "data/train_colored/Timeline 1_00"+str(random_idx)+".png",
+    #         clf=clf,
+    #         scaler=scaler,
+    #         palette_colors=palette_colors,
+    #         show=True
+    #     )
+    #     cv.imwrite('out.png', reconstructed)
+
+    batch_process_reconstruction(
+            blank_dir = IN_LINES_DIR,
+            regular_dir=IN_FILLED_DIR,
         )
 
     pass
