@@ -1,3 +1,9 @@
 **/.DS_Store
 
 model.joblib
+
+output/out_full/*
+!output/out_full/.gitkeep
+
+output/out_fills_only/*
+!output/out_fills_only/.gitkeep
