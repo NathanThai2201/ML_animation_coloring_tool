@@ -478,6 +478,8 @@ def batch_process_reconstruction(blank_dir, regular_dir):
 
         # if not os.path.exists(regular_path):
         #     continue
+        if f == ".gitkeep":
+            continue
 
         reconstructed = reconstruct_blank_image(
             line_path,
@@ -489,7 +491,7 @@ def batch_process_reconstruction(blank_dir, regular_dir):
             show=False
         )
 
-def extract_contours_and_features(line_path, regular_path, palette_colors, show):
+def extract_contours_and_features(line_path, regular_path, show):
 
     '''
     THRESHOLDING STAGE
@@ -588,7 +590,6 @@ def reconstruct_blank_image(line_path, regular_path, output_full_path,output_fil
     data, contours, img, ref_img = extract_contours_and_features(
         line_path,
         regular_path,
-        palette_colors,
         show
     )
 
@@ -690,10 +691,12 @@ def reconstruct_blank_image(line_path, regular_path, output_full_path,output_fil
         #print("Palette colors:",palette_colors)
 
 
+
     # save checkpoint2 as fills only
     fills_only = np.clip(reconstructed[:, :, :3], 0, 255).astype(np.uint8)
 
-
+    # save black mask here for alternative alpha calculation
+    black_mask = np.all(reconstructed[:, :, :3] == [0, 0, 0], axis=2)
     # img alpha over reconstructed
 
     # w,h,_ = img.shape
@@ -716,6 +719,8 @@ def reconstruct_blank_image(line_path, regular_path, output_full_path,output_fil
 
     # clip values and return as readable image type.
     reconstructed = np.clip(reconstructed, 0, 255).astype(np.uint8)
+    
+    # set alpha
     if ref_img is not None:
         if ref_img.shape[2] == 3:
         # Reload with alpha if not already
@@ -730,6 +735,7 @@ def reconstruct_blank_image(line_path, regular_path, output_full_path,output_fil
             alpha = np.full(ref_with_alpha.shape[:2], 255, dtype=np.uint8)
     else:
         alpha = np.full(reconstructed.shape[:2], 255, dtype=np.uint8)
+        alpha[black_mask] = 0
 
     # Make reconstructed & fills_only 4 channel clipped
     reconstructed = np.clip(reconstructed[:, :, :3], 0, 255).astype(np.uint8)
@@ -805,7 +811,7 @@ if __name__ == "__main__":
         dump(best_acc, "cache/scores.joblib")
     else:
         scaler = StandardScaler()
-        palette_colors = load_palette_colors("palette.png")
+        palette_colors = load_palette_colors(PALETTE_DIR)
         clf = load("cache/model.joblib")
         acc = load("cache/scores.joblib")
 
