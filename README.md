@@ -6,7 +6,7 @@ This tool uses a machine learning-based approach to automatically color 2D anima
 The data must first be preprocessed. The input consists of example fully colored cels with transparency and their corresponding line art layers with transparency.
 Contours are extracted from each enclosed region, including regions that intersect the image boundaries. Shape features are then computed from these contours using standard shape feature extraction techniques. <sub><sup>[1]</sup></sub>
 Color labels are assigned using a predefined color palette. The extracted features and corresponding labels are used to train a Random Forest classifier.
-New frames are reconstructed using the trained classification model. Current results achieve a color prediction accuracy of 89.75%<br>
+New frames are reconstructed using the trained classification model. Current results can achieve a color prediction accuracy of 91.95%<br>
 
 <br>
 
