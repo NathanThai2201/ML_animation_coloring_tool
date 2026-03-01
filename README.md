@@ -1,4 +1,4 @@
-# ML Animation Coloring Tool 
+# Ani-ML - ML Animation Coloring Tool 
 
 
 ## Overview
