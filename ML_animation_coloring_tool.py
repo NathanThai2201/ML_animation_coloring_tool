@@ -212,7 +212,11 @@ def batch_process_train(blank_dir, regular_dir, palette_path):
     all_data = []
     all_classes = []
 
-    files = sorted(os.listdir(blank_dir))
+    # files = sorted(os.listdir(blank_dir))
+    files = sorted(
+        f for f in os.listdir(blank_dir)
+        if f.lower().endswith((".png", ".jpg", ".jpeg"))
+    )
 
     # loop through files
     for f in files:
@@ -460,6 +464,24 @@ def learn_classifier(data, y_cls,n_estimators, max_features):
 
     return x_test, y_test, y_pred, clf, acc
 
+def learn_classifier_full(data, y_cls, n_estimators, max_features):
+    clf = RandomForestClassifier(
+        n_estimators=n_estimators,
+        max_features=max_features,
+        n_jobs=-1,
+        random_state=42
+    )
+
+    clf.fit(data, y_cls)
+
+    print(f"Trained with n_estimators={n_estimators}, max_features={max_features}")
+    acc = 0
+    x_test = 0
+    y_test = 0
+    y_pred = 0
+
+    return x_test, y_test, y_pred, clf, acc
+
 
 '''
     RECONSTRUCTION
@@ -467,7 +489,10 @@ def learn_classifier(data, y_cls,n_estimators, max_features):
 
 def batch_process_reconstruction(blank_dir, regular_dir):
 
-    files = sorted(os.listdir(blank_dir))
+    files = sorted(
+        f for f in os.listdir(blank_dir)
+        if f.lower().endswith((".png", ".jpg", ".jpeg"))
+    )
 
     # loop through files
     for f in files:
@@ -478,8 +503,8 @@ def batch_process_reconstruction(blank_dir, regular_dir):
 
         # if not os.path.exists(regular_path):
         #     continue
-        if f == ".gitkeep":
-            continue
+        # if f == ".gitkeep":
+        #     continue
 
         reconstructed = reconstruct_blank_image(
             line_path,
