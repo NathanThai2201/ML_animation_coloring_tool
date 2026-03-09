@@ -818,7 +818,7 @@ if __name__ == "__main__":
 
         # Train random forest classifier
         params = {
-            "n_estimators": [200,400,600,800,1000],
+            "n_estimators": [200,400,600,800,1000], 
             "max_depth": [None, 10, 20, 30 , 50],
             "max_features": [None,"sqrt", "log2"]
         }
