@@ -63,15 +63,45 @@ def load_palette_colors(palette_path):
 
     return colors.astype(np.float32)
 
-def contour_features(contours,img):
-    area = cv.contourArea(contours)
+def get_contour_neighbours(contour,contours,cx,cy):
+
+    # Scale up the contour: first find centroid, centralize, scale up, then move back.
+
+    scale_factor = 1.1
+    centroid = np.array([cx,cy])
+    # for i in contour:
+    #     i = (i.astype(np.float64)-centroid)*scale_factor + centroid
+    pts = contour.reshape(-1, 2).astype(np.float64)
+    scaled_pts = (pts - centroid) * scale_factor + centroid
+
+    intersected = set()
+
+    # finding points in contours:
+    count = 0
+    for pt in scaled_pts:
+        pt_tuple = (float(pt[0]), float(pt[1]))  
+
+        for idx, other in enumerate(contours):
+            if other is contour:
+                continue
+
+            dist = cv.pointPolygonTest(other, pt_tuple, False)
+            if dist > 0:
+                intersected.add(idx)  
+                break  # move to next point
+    print(len(intersected))
+    return len(intersected)
+
+
+def contour_features(contour,contours,img):
+    area = cv.contourArea(contour)
     if area == 0:
         return None
 
-    perimeter = cv.arcLength(contours, True)
+    perimeter = cv.arcLength(contour, True)
 
     # Bounding box
-    x, y, w, h = cv.boundingRect(contours)
+    x, y, w, h = cv.boundingRect(contour)
     if h != 0:
         aspect_ratio = w/h
     else: 
@@ -82,7 +112,7 @@ def contour_features(contours,img):
         rectangularity = 0
 
     # Convex hull
-    hull = cv.convexHull(contours)
+    hull = cv.convexHull(contour)
     hull_area = cv.contourArea(hull)
     if hull_area != 0:
         solidity = area / hull_area 
@@ -99,7 +129,7 @@ def contour_features(contours,img):
 
 
     # Hu moments /invariant moments
-    moments = cv.moments(contours)
+    moments = cv.moments(contour)
     hu = cv.HuMoments(moments).flatten()
     # log scale hu moments
     hu2 = []
@@ -132,7 +162,9 @@ def contour_features(contours,img):
 
 
 
-    # number of neighbors (TODO)
+    # number of neighbors
+    
+    neighbour_count = get_contour_neighbours(contour,contours,cx,cy)
 
     return [
         aspect_ratio,
@@ -146,7 +178,8 @@ def contour_features(contours,img):
         cx,
         cy,
         dx,
-        dy
+        dy,
+        neighbour_count
     ]
 
 def filter_bad_contours(contours, hierarchy, img):
@@ -183,7 +216,7 @@ def filter_bad_contours(contours, hierarchy, img):
         #     continue
 
         # must have valid features
-        if contour_features(contour, img) is None:
+        if contour_features(contour,contours, img) is None:
             continue
 
      
@@ -419,7 +452,7 @@ def process_image_pair(line_path,regular_path, palette_colors, show):
     valid_contours = []
 
     for cont, lb in zip(contours2, labels):
-        f = contour_features(cont,img)
+        f = contour_features(cont,contours2,img)
         if f is None:
             continue
         features.append(f)
@@ -600,7 +633,7 @@ def extract_contours_and_features(line_path, regular_path, show):
     valid_contours = []
 
     for c in contours2:
-        f = contour_features(c, img)
+        f = contour_features(c,contours2, img)
         if f is not None:
             features.append(f)
             valid_contours.append(c)
