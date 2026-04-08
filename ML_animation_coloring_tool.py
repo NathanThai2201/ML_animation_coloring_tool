@@ -67,7 +67,7 @@ def get_contour_neighbours(contour,contours,cx,cy):
 
     # Scale up the contour: first find centroid, centralize, scale up, then move back.
 
-    scale_factor = 1.1
+    scale_factor = 1.01
     centroid = np.array([cx,cy])
     # for i in contour:
     #     i = (i.astype(np.float64)-centroid)*scale_factor + centroid
@@ -89,7 +89,7 @@ def get_contour_neighbours(contour,contours,cx,cy):
             if dist > 0:
                 intersected.add(idx)  
                 break  # move to next point
-    print(len(intersected))
+    #print(len(intersected))          
     return len(intersected)
 
 
@@ -164,7 +164,7 @@ def contour_features(contour,contours,img):
 
     # number of neighbors
     
-    neighbour_count = get_contour_neighbours(contour,contours,cx,cy)
+    #neighbour_count = get_contour_neighbours(contour,contours,cx,cy)
 
     return [
         aspect_ratio,
@@ -178,8 +178,7 @@ def contour_features(contour,contours,img):
         cx,
         cy,
         dx,
-        dy,
-        neighbour_count
+        dy
     ]
 
 def filter_bad_contours(contours, hierarchy, img):
