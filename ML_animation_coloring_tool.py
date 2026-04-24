@@ -1,5 +1,6 @@
 import os
 import cv2 as cv
+import mahotas
 import numpy as np
 import matplotlib
 #matplotlib.use('TkAgg')   
@@ -143,6 +144,11 @@ def contour_features(contour,contours,img):
 
     hu = hu2
     
+    # Zernike moments
+    mask = np.zeros(img.shape[:2], dtype="uint8")
+    cv.drawContours(mask, contour, -1, 255, -1)
+    roi = mask[round(y):round(y + h), round(x):round(x + w)]
+    zern = mahotas.features.zernike_moments(roi, cv.minEnclosingCircle(contour)[1], degree=8)
 
 
     img_area = img.shape[0] * img.shape[1]
