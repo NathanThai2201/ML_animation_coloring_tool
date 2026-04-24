@@ -172,6 +172,12 @@ def contour_features(contour,contours,img):
     
     #neighbour_count = get_contour_neighbours(contour,contours,cx,cy)
 
+    # Not added/ not implemented: 
+    #
+    # *zern (no improvement)
+    # neighbour_count (method not functional)
+    #
+
     return [
         aspect_ratio,
         rectangularity,
